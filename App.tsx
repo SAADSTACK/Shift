@@ -39,6 +39,10 @@ const App: React.FC = () => {
     setIsTyping(true);
 
     try {
+      if (!process.env.API_KEY) {
+        throw new Error("API_KEY_MISSING");
+      }
+
       if (selectedImage && text.trim()) {
         const editedUrl = await editImage(text, selectedImage.base64, selectedImage.mimeType);
         const assistantMsg: ChatMessage = {
@@ -63,10 +67,20 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("SHIFT Failure:", error);
+      let errorText = "I encountered a cognitive blockage. Verify your connection and grounding parameters.";
+      
+      if (error.message === "API_KEY_MISSING") {
+        errorText = "SYSTEM ERROR: API Key is not configured in the environment. Please add it to your project settings.";
+      } else if (error.message?.includes("403") || error.message?.includes("permission")) {
+        errorText = "ACCESS DENIED: The API key provided does not have permissions for this model or task.";
+      } else if (error.message?.includes("404") || error.message?.includes("not found")) {
+        errorText = "MODEL UNAVAILABLE: The requested cognitive engine is not available in this region.";
+      }
+
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "I encountered a cognitive blockage. Verify your connection and grounding parameters.",
+        content: errorText,
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -108,7 +122,7 @@ const App: React.FC = () => {
                 </p>
                 <div className="flex justify-center gap-4">
                   <button 
-                    onClick={() => { setGroundingMode('search'); handleSendMessage("What is the current consensus on EV adoption in London?"); }}
+                    onClick={() => { setGroundingMode('search'); handleSendMessage("What is the current consensus on EV adoption in London vs Paris?"); }}
                     className="px-6 py-2 glass rounded-full text-xs text-blue-400 hover:text-white border border-blue-500/30 transition-all font-bold tracking-widest uppercase"
                   >
                     Search Grounding

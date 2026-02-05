@@ -30,5 +30,5 @@ Return a JSON object with EXACTLY these fields:
 Keep total response content under 150 words.
 `;
 
-export const SHIFT_MODEL = 'gemini-3-pro-preview';
+export const SHIFT_MODEL = 'gemini-3-flash-preview';
 export const LIVE_MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
