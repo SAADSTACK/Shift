@@ -39,10 +39,6 @@ const App: React.FC = () => {
     setIsTyping(true);
 
     try {
-      if (!process.env.API_KEY) {
-        throw new Error("API_KEY_MISSING");
-      }
-
       if (selectedImage && text.trim()) {
         const editedUrl = await editImage(text, selectedImage.base64, selectedImage.mimeType);
         const assistantMsg: ChatMessage = {
@@ -69,12 +65,13 @@ const App: React.FC = () => {
       console.error("SHIFT Failure:", error);
       let errorText = "I encountered a cognitive blockage. Verify your connection and grounding parameters.";
       
-      if (error.message === "API_KEY_MISSING") {
-        errorText = "SYSTEM ERROR: API Key is not configured in the environment. Please add it to your project settings.";
-      } else if (error.message?.includes("403") || error.message?.includes("permission")) {
-        errorText = "ACCESS DENIED: The API key provided does not have permissions for this model or task.";
-      } else if (error.message?.includes("404") || error.message?.includes("not found")) {
-        errorText = "MODEL UNAVAILABLE: The requested cognitive engine is not available in this region.";
+      const errorStr = error.toString().toLowerCase();
+      if (errorStr.includes("api_key") || errorStr.includes("key not found") || errorStr.includes("invalid api key")) {
+        errorText = "SYSTEM ERROR: API Key is not detected or invalid. Please ensure you have added 'API_KEY' to Vercel and RE-DEPLOYED the application.";
+      } else if (errorStr.includes("403") || errorStr.includes("permission")) {
+        errorText = "ACCESS DENIED: The API key provided does not have permissions for this model. Check your GCP project billing status.";
+      } else if (errorStr.includes("404") || errorStr.includes("not found")) {
+        errorText = "MODEL UNAVAILABLE: The requested cognitive engine is not available in your current configuration.";
       }
 
       const errorMsg: ChatMessage = {
