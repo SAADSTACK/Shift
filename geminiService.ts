@@ -3,11 +3,16 @@ import { GoogleGenAI, GenerateContentResponse, LiveServerMessage, Modality, Type
 import { SYSTEM_INSTRUCTION, SHIFT_MODEL, LIVE_MODEL } from "./constants";
 import { ShiftResponse } from "./types";
 
-const ai = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = () => {
+  const key = process.env.API_KEY;
+  if (!key) {
+    console.error("Gemini API Key missing in process.env.API_KEY");
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 /**
  * Robustly parses the model response, handling both JSON and Markdown formats.
- * Especially useful for grounded responses (Search/Maps) which often return Markdown.
  */
 export const parseShiftResponse = (text: string, response?: GenerateContentResponse): ShiftResponse => {
   let groundingUrls: Array<{ uri: string; title?: string }> = [];
@@ -18,6 +23,18 @@ export const parseShiftResponse = (text: string, response?: GenerateContentRespo
       if (chunk.maps) return { uri: chunk.maps.uri, title: chunk.maps.title };
       return null;
     }).filter(Boolean);
+  }
+
+  // Handle cases where the model might refuse or return empty text
+  if (!text || text.trim().length === 0) {
+    return {
+      missing: "The input provided was insufficient for cognitive analysis.",
+      differentWay: "Try providing a more specific decision, belief, or pattern to analyze.",
+      longTerm: "No clear long-term consequences could be derived from the current input.",
+      nextStep: "Provide a coherent statement or question.",
+      rawText: "EMPTY_RESPONSE",
+      groundingUrls
+    };
   }
 
   // Attempt JSON parsing first (primary method for Logic-only mode)
@@ -38,17 +55,16 @@ export const parseShiftResponse = (text: string, response?: GenerateContentRespo
     console.warn("JSON parse failed, falling back to Markdown extraction", e);
   }
 
-  // Robust Markdown extraction (fallback for grounded modes)
-  // Split by headers that look like "1. Emoji Name" or just "Emoji Name"
+  // Robust Markdown extraction
   const getSection = (patterns: string[]) => {
     for (const pattern of patterns) {
       const regex = new RegExp(`${pattern}[:\\s]*([\\s\\S]*?)(?=(?:\\n\\d\\.|\\n[🧠🔍⏳✅]|$))`, 'i');
       const match = text.match(regex);
-      if (match && match[1].trim() && !match[1].trim().toLowerCase().includes("information extraction failed")) {
+      if (match && match[1].trim() && !match[1].trim().toLowerCase().includes("failed")) {
         return match[1].trim();
       }
     }
-    return "The model provided insight, but it could not be categorized. Review raw output.";
+    return "Analysis unavailable for this section.";
   };
 
   const missing = getSection(['1\\.\\s*🧠', 'What you might be missing', '🧠']);
@@ -72,7 +88,6 @@ export const sendTextMessage = async (message: string, useSearch = false, useMap
   const tools: any[] = [];
   let toolConfig: any = undefined;
 
-  // Formatting suffix to reinforce structure when JSON mode is disabled (Search/Maps)
   const formatReinforcement = `\n\nIMPORTANT: You MUST structure your response with these exact headers:
 1. 🧠 What you might be missing: [Content]
 2. 🔍 A different way to see this: [Content]
@@ -110,7 +125,6 @@ export const sendTextMessage = async (message: string, useSearch = false, useMap
       temperature: 0.7,
       tools,
       toolConfig,
-      // Only use JSON mode for ungrounded queries to ensure compatibility with Search/Maps tools
       responseMimeType: (useMaps || useSearch) ? undefined : "application/json",
       responseSchema: (useMaps || useSearch) ? undefined : {
         type: Type.OBJECT,
@@ -125,7 +139,12 @@ export const sendTextMessage = async (message: string, useSearch = false, useMap
     }
   });
 
-  return parseShiftResponse(response.text || "", response);
+  if (!response.candidates || response.candidates.length === 0) {
+    throw new Error("The model failed to generate any candidates. This might be due to safety filters.");
+  }
+
+  const text = response.text || "";
+  return parseShiftResponse(text, response);
 };
 
 export const editImage = async (prompt: string, base64Image: string, mimeType: string): Promise<string | null> => {
@@ -140,9 +159,11 @@ export const editImage = async (prompt: string, base64Image: string, mimeType: s
     }
   });
 
-  for (const part of response.candidates[0].content.parts) {
-    if (part.inlineData) {
-      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+  if (response.candidates?.[0]?.content?.parts) {
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
     }
   }
   return null;

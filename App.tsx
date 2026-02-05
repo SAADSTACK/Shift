@@ -63,24 +63,43 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("SHIFT Failure:", error);
-      let errorText = "I encountered a cognitive blockage. Verify your connection and grounding parameters.";
       
+      let errorHeader = "COGNITIVE BLOCKAGE DETECTED";
+      let errorBody = "An unexpected error occurred during processing.";
+
       const errorStr = error.toString().toLowerCase();
+      const errorMsg = error.message || error.toString();
+
       if (errorStr.includes("api_key") || errorStr.includes("key not found") || errorStr.includes("invalid api key")) {
-        errorText = "SYSTEM ERROR: API Key is not detected or invalid. Please ensure you have added 'API_KEY' to Vercel and RE-DEPLOYED the application.";
-      } else if (errorStr.includes("403") || errorStr.includes("permission")) {
-        errorText = "ACCESS DENIED: The API key provided does not have permissions for this model. Check your GCP project billing status.";
-      } else if (errorStr.includes("404") || errorStr.includes("not found")) {
-        errorText = "MODEL UNAVAILABLE: The requested cognitive engine is not available in your current configuration.";
+        errorHeader = "SYSTEM AUTHENTICATION ERROR";
+        errorBody = "API Key is missing or invalid. Verify that 'API_KEY' is correctly configured in your Vercel Environment Variables and that you have RE-DEPLOYED.";
+      } else if (errorStr.includes("safety") || errorStr.includes("blocked")) {
+        errorHeader = "CONTENT FILTER TRIGGERED";
+        errorBody = "The cognitive input or model output was blocked by safety filters. Refine your prompt to avoid sensitive or ambiguous terminology.";
+      } else if (errorStr.includes("quota") || errorStr.includes("rate limit") || errorStr.includes("429")) {
+        errorHeader = "COGNITIVE CAPACITY EXCEEDED";
+        errorBody = "The system is currently handling too many requests. Please wait a moment before trying again.";
+      } else if (errorStr.includes("location") || errorStr.includes("geolocation")) {
+        errorHeader = "GEOSPATIAL ERROR";
+        errorBody = "Maps grounding failed. Please ensure location permissions are granted in your browser.";
+      } else {
+        errorBody = `Technical Detail: ${errorMsg}`;
       }
 
-      const errorMsg: ChatMessage = {
+      const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: errorText,
+        content: errorBody,
         timestamp: Date.now(),
+        parsedResponse: {
+          missing: errorHeader,
+          differentWay: errorBody,
+          longTerm: "System reliability may be affected by persistent errors.",
+          nextStep: "Check project logs or verify grounding configurations.",
+          rawText: errorMsg
+        }
       };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev => [...prev, assistantMsg]);
     } finally {
       setIsTyping(false);
     }
@@ -204,25 +223,35 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             {mode === AppMode.TEXT ? (
               <div className="flex-1 flex items-center gap-2">
-                <label className="cursor-pointer w-14 h-14 glass border border-white/10 rounded-2xl flex items-center justify-center text-neutral-500 hover:text-blue-400 transition-colors">
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          const base64 = (reader.result as string).split(',')[1];
-                          handleImageSelect(base64, file.type);
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                  <i className={`fa-solid ${selectedImage ? 'fa-image text-blue-500' : 'fa-plus'}`}></i>
-                </label>
+                <div className="relative group">
+                  <label className="cursor-pointer w-14 h-14 glass border border-white/10 rounded-2xl flex items-center justify-center text-neutral-500 hover:text-blue-400 transition-colors">
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const base64 = (reader.result as string).split(',')[1];
+                            handleImageSelect(base64, file.type);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <i className={`fa-solid ${selectedImage ? 'fa-image text-blue-500' : 'fa-plus'}`}></i>
+                  </label>
+                  {selectedImage && (
+                    <button 
+                      onClick={() => setSelectedImage(null)}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center shadow-lg"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  )}
+                </div>
                 <ChatInput onSend={handleSendMessage} disabled={isTyping} />
               </div>
             ) : (
