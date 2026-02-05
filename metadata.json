@@ -1,0 +1,8 @@
+{
+  "name": "SHIFT Cognitive Co-pilot",
+  "description": "An advanced cognitive second-brain that challenges your assumptions and reframes your intelligence using Gemini 3.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}
